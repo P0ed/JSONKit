@@ -1,35 +1,21 @@
 import Foundation
 
-public protocol JSONDecodable {
-	init(json: JSON) throws
-}
-
-public protocol JSONContainer {
-	func get() throws -> JSON
-}
-
-public struct AnyJSONContainer {
-	public var json: () throws -> JSON
-}
-
-extension AnyJSONContainer: JSONContainer {
-	public func get() throws -> JSON { try json() }
-}
-
 public struct JSON {
 	public var object: Any
 	public var codingPath: [CodingKey]
 }
 
 public extension JSON {
+
 	enum Key {
 		case field(String)
 		case index(Int)
 	}
-}
 
-public extension JSON {
 	init(_ object: Any) { self = JSON(object: object, codingPath: []) }
+
+	subscript(_ field: String) -> JSON { get throws { try nestedContainer(.field(field)) } }
+	subscript(_ index: Int) -> JSON { get throws { try nestedContainer(.index(index)) } }
 
 	func nestedContainer(_ key: Key) throws -> JSON {
 		let nestedObject: Any? = try {
@@ -63,42 +49,29 @@ public extension JSON {
 			?? { throw DecodingError.typeMismatch(A.self, .path(json.codingPath)) }()
 		}
 	}
+	func decode<A: JSONDecodable>(_ type: A.Type = A.self) throws -> A { try decode(A.init(json:)) }
+	func decodeOptional<A: JSONDecodable>(_ type: A.Type = A.self) throws -> A? { try decodeOptional(A.init(json:)) }
 }
 
 extension JSON.Key: CodingKey {
 	public var stringValue: String {
 		switch self {
-		case .field(let value): return value
-		case .index(let value): return "\(value)"
+		case .field(let value): value
+		case .index(let value): "\(value)"
 		}
 	}
 	public var intValue: Int? {
 		switch self {
-		case .field: return nil
-		case .index(let value): return value
+		case .field: nil
+		case .index(let value): value
 		}
 	}
 	public init?(stringValue: String) { self = .field(stringValue) }
 	public init?(intValue: Int) { self = .index(intValue) }
 }
 
-extension JSON: JSONContainer {
-	public func get() throws -> JSON { self }
-}
-
-public extension JSONContainer {
-	subscript(_ field: String) -> JSONContainer { AnyJSONContainer { try get().nestedContainer(.field(field)) } }
-	subscript(_ index: Int) -> JSONContainer { AnyJSONContainer { try get().nestedContainer(.index(index)) } }
-
-	var ifPresent: JSON? { try? get() }
-
-	func array() throws -> [JSON] { try get().array() }
-	func convert<A>(_ type: A.Type = A.self) throws -> A { try get().convert() }
-
-	func decode<A>(_ transform: (JSON) throws -> A) throws -> A { try get().decode(transform) }
-	func decode<A: JSONDecodable>(_ type: A.Type = A.self) throws -> A { try decode(A.init(json:)) }
-	func decodeOptional<A>(_ transform: (JSON) throws -> A) throws -> A? { try get().decodeOptional(transform) }
-	func decodeOptional<A: JSONDecodable>(_ type: A.Type = A.self) throws -> A? { try decodeOptional(A.init(json:)) }
+public protocol JSONDecodable {
+	init(json: JSON) throws
 }
 
 extension Array: JSONDecodable where Element: JSONDecodable {
